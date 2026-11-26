@@ -1,0 +1,4653 @@
+openapi: 3.0.3
+info:
+  title: PharmaOS Enterprise SFA + Distribution Connect API
+  version: 1.0.0-phase9
+  description: |
+    Phase 9 HTTP API for the multi-tenant PharmaOS platform. Business endpoints are
+    served under `/api/v1` and require a bearer access token issued by the public
+    authentication endpoints. Protected endpoints are also scoped to the token's
+    tenant, active session, and role permissions. Health and documentation routes
+    are public.
+servers:
+  - url: /
+    description: Same host serving the PharmaOS backend
+tags:
+  - name: Health
+    description: Liveness and readiness probes registered when a database is configured.
+  - name: Documentation
+    description: Built-in API documentation endpoints.
+  - name: Observability
+    description: Public Prometheus-formatted metrics endpoint for scrape collection.
+  - name: Auth
+    description: Authentication, session, and password management.
+  - name: Tenants
+    description: Tenant administration and settings.
+  - name: Users
+    description: User administration and role grants.
+  - name: Roles
+    description: Role administration and permission assignments.
+  - name: Permissions
+    description: Permission catalogue.
+  - name: Organization
+    description: Divisions, branches, regions, territories, and the organization hierarchy.
+  - name: Employees
+    description: Employee records, positions, effective-dated assignments, and transfers.
+  - name: Master data
+    description: Doctors, chemists, stockists, product categories, and products.
+  - name: CRM targets
+    description: Effective-period targets for doctors, chemists, and stockists.
+  - name: Field execution
+    description: Tour plans, GPS visits, attachments, and daily call reports.
+  - name: Distribution
+    description: Company-distributor links, orders, secondary sales, and serialized inventory movements.
+  - name: Mobile sync
+    description: Offline-first change pull, operation push, and queue status endpoints.
+  - name: Reporting
+    description: Scope-aware dashboards, immutable audit trail, saved definitions, and report snapshots.
+  - name: Integrations
+    description: Integration connections, webhook event publishing, delivery history, and retries.
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      operationId: getHealthz
+      description: Returns process liveness and uptime. Public endpoint.
+      security: []
+      responses:
+        '200':
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+              example:
+                success: true
+                message: OK
+                data:
+                  status: alive
+                  uptime_seconds: 123.45
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      operationId: getReadyz
+      description: Checks database connectivity and that all expected migrations have been applied. Public endpoint.
+      security: []
+      responses:
+        '200':
+          description: Database is reachable and migrations are current.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+              example:
+                success: true
+                message: OK
+                data:
+                  status: ready
+                  database: ok
+                  migration_version: 12
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /docs:
+    get:
+      tags: [Documentation]
+      summary: API documentation UI
+      operationId: getDocsUI
+      description: Returns a small HTML page linking to the OpenAPI document. Public endpoint.
+      security: []
+      responses:
+        '200':
+          description: HTML documentation page.
+          content:
+            text/html:
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /docs/openapi.yaml:
+    get:
+      tags: [Documentation]
+      summary: OpenAPI document
+      operationId: getOpenAPIDocument
+      description: Returns the embedded OpenAPI 3.0.3 specification. Public endpoint.
+      security: []
+      responses:
+        '200':
+          description: YAML OpenAPI document.
+          content:
+            application/yaml:
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /metrics:
+    get:
+      tags: [Observability]
+      summary: Prometheus metrics
+      operationId: getMetrics
+      description: Returns Prometheus-formatted HTTP request and security-event counters. Public endpoint; restrict access at the edge.
+      security: []
+      responses:
+        '200':
+          description: Prometheus text exposition.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and issue tokens
+      operationId: login
+      description: Authenticates a user within a tenant and creates a new session. Public endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication succeeded; access and refresh tokens returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh an access token
+      operationId: refreshToken
+      description: Exchanges a valid refresh token for a new token pair and session. Public endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token pair refreshed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request a password reset
+      operationId: forgotPassword
+      description: |
+        If the account exists, a reset token is generated and dispatched through the
+        configured password-reset sender. The response is always accepted for valid
+        input. Public endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  accepted: true
+                  message: If the account exists, reset instructions have been sent
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset a password with a reset token
+      operationId: resetPassword
+      description: Consumes a password-reset token, updates the password, and revokes active sessions. Public endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  password_reset: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out of the current session
+      operationId: logout
+      description: Revokes the access token's session. Requires a valid bearer token and active session.
+      responses:
+        '200':
+          description: Session revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  logged_out: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the current principal
+      operationId: getCurrentPrincipal
+      description: Returns identity, roles, permissions, and data scope from the authenticated access token.
+      responses:
+        '200':
+          description: Current principal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/auth/sessions:
+    get:
+      tags: [Auth]
+      summary: List active sessions
+      operationId: listSessions
+      description: Returns non-revoked, unexpired sessions for the authenticated user.
+      responses:
+        '200':
+          description: Active sessions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change the current user's password
+      operationId: changePassword
+      description: Verifies the current password and sets a new password for the authenticated user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  password_changed: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/tenants:
+    get:
+      tags: [Tenants]
+      summary: List tenants
+      operationId: listTenants
+      description: |
+        Returns a paginated tenant list. Non-privileged callers receive only their own
+        tenant. Requires the `tenant.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+      responses:
+        '200':
+          description: Paginated tenants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Tenants]
+      summary: Create a tenant
+      operationId: createTenant
+      description: Creates a tenant. Requires the `tenant.manage` permission and a privileged principal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+      responses:
+        '201':
+          description: Tenant created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/tenants/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Tenants]
+      summary: Get a tenant
+      operationId: getTenant
+      description: Returns one tenant. Non-privileged callers may only read their own tenant. Requires the `tenant.view` permission.
+      responses:
+        '200':
+          description: Tenant details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [Tenants]
+      summary: Update a tenant
+      operationId: updateTenant
+      description: Updates a tenant's name, status, timezone, currency, and settings. Requires the `tenant.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+      responses:
+        '200':
+          description: Tenant updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/tenants/{id}/settings/{key}:
+    put:
+      tags: [Tenants]
+      summary: Set a tenant setting
+      operationId: setTenantSetting
+      description: Inserts or replaces a tenant setting identified by key. Requires the `tenant.manage` permission.
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - $ref: '#/components/parameters/SettingKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettingValueRequest'
+      responses:
+        '200':
+          description: Setting stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSettingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users
+      operationId: listUsers
+      description: Returns a paginated user list scoped by tenant unless the caller is privileged. Requires the `user.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+      responses:
+        '200':
+          description: Paginated users.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Users]
+      summary: Create a user
+      operationId: createUser
+      description: |
+        Creates a user in the caller's tenant, or in an explicitly supplied tenant when
+        the caller is privileged. Requires the `user.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Users]
+      summary: Get a user
+      operationId: getUser
+      description: Returns one user. Cross-tenant access is rejected for non-privileged callers. Requires the `user.view` permission.
+      responses:
+        '200':
+          description: User details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [Users]
+      summary: Update a user
+      operationId: updateUser
+      description: Updates name, phone, status, and email verification for a user. Requires the `user.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/users/{id}/deactivate:
+    post:
+      tags: [Users]
+      summary: Deactivate a user
+      operationId: deactivateUser
+      description: Deactivates a user. A user cannot deactivate their own account. Requires the `user.manage` permission.
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      responses:
+        '200':
+          description: User deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  deactivated: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/users/{id}/roles:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Users]
+      summary: List role grants for a user
+      operationId: listUserRoles
+      description: Returns active and expired role assignment records for a user. Requires the `user.view` permission.
+      responses:
+        '200':
+          description: Role grants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRoleGrantListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Users]
+      summary: Assign a role to a user
+      operationId: assignUserRole
+      description: Creates a scoped role grant for a user. Requires the `user.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleRequest'
+      responses:
+        '200':
+          description: Role assigned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  assigned: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/users/{id}/roles/{role_id}:
+    delete:
+      tags: [Users]
+      summary: Remove a role from a user
+      operationId: removeUserRole
+      description: Removes the matching user-role grant. Requires the `user.manage` permission.
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+        - $ref: '#/components/parameters/RoleIDParam'
+        - $ref: '#/components/parameters/ScopeTypeParam'
+        - $ref: '#/components/parameters/ScopeIDParam'
+      responses:
+        '200':
+          description: Role removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  removed: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/roles:
+    get:
+      tags: [Roles]
+      summary: List roles
+      operationId: listRoles
+      description: Returns a paginated role list. Requires the `role.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+      responses:
+        '200':
+          description: Paginated roles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags: [Roles]
+      summary: Create a role
+      operationId: createRole
+      description: Creates a tenant role with an optional set of permission codes. Requires the `role.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+      responses:
+        '201':
+          description: Role created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/roles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Roles]
+      summary: Get a role
+      operationId: getRole
+      description: Returns a role together with its assigned permission codes. Requires the `role.view` permission.
+      responses:
+        '200':
+          description: Role details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags: [Roles]
+      summary: Update a role
+      operationId: updateRole
+      description: Updates a role's name, description, data scope, and privileged flag. Requires the `role.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        '200':
+          description: Role updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Roles]
+      summary: Delete a role
+      operationId: deleteRole
+      description: Soft-deletes a role. System roles cannot be deleted. Requires the `role.manage` permission.
+      responses:
+        '200':
+          description: Role deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlagResponse'
+              example:
+                success: true
+                message: OK
+                data:
+                  deleted: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/roles/{id}/permissions:
+    put:
+      tags: [Roles]
+      summary: Replace role permissions
+      operationId: setRolePermissions
+      description: Replaces all permission codes assigned to a role. Requires the `role.manage` permission.
+      parameters:
+        - $ref: '#/components/parameters/IDParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPermissionsRequest'
+      responses:
+        '200':
+          description: Permissions replaced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/permissions:
+    get:
+      tags: [Permissions]
+      summary: List permissions
+      operationId: listPermissions
+      description: Returns the complete permission catalogue ordered by module and code. Requires the `role.view` permission.
+      responses:
+        '200':
+          description: Permission catalogue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/divisions:
+    get:
+      tags: [Organization]
+      summary: List business divisions
+      operationId: listDivisions
+      description: Returns a paginated division list. Requires the `employee.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+      responses:
+        '200':
+          description: Paginated divisions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Organization]
+      summary: Create a business division
+      operationId: createDivision
+      description: Creates a division. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, status]
+              properties:
+                code:
+                  type: string
+                  minLength: 2
+                  maxLength: 40
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 150
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: [ACTIVE, INACTIVE]
+                manager_user_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                settings:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201':
+          description: Division created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/divisions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Organization]
+      summary: Get a business division
+      operationId: getDivision
+      description: Returns one division. Requires the `employee.view` permission.
+      responses:
+        '200':
+          description: Division details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [Organization]
+      summary: Update a business division
+      operationId: updateDivision
+      description: Updates a division. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, status]
+              properties:
+                code:
+                  type: string
+                name:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: [ACTIVE, INACTIVE]
+                manager_user_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                settings:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Division updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [Organization]
+      summary: Delete a business division
+      operationId: deleteDivision
+      description: Soft-deletes a division. Requires the `employee.manage` permission.
+      responses:
+        '200':
+          description: Division deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/regions:
+    get:
+      tags: [Organization]
+      summary: List regions
+      operationId: listRegions
+      description: Returns a paginated region list, optionally filtered by division. Requires the `employee.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: division_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated regions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Organization]
+      summary: Create a region
+      operationId: createRegion
+      description: Creates a region in a division. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [division_id, code, name, status]
+              properties:
+                division_id:
+                  type: string
+                  format: uuid
+                code:
+                  type: string
+                name:
+                  type: string
+                status:
+                  type: string
+                  enum: [ACTIVE, INACTIVE]
+      responses:
+        '201':
+          description: Region created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/territories:
+    get:
+      tags: [Organization]
+      summary: List territories
+      operationId: listTerritories
+      description: Returns a paginated territory list, optionally filtered by division or region. Requires the `employee.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: division_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: region_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated territories.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Organization]
+      summary: Create a territory
+      operationId: createTerritory
+      description: Creates a territory whose region must belong to the supplied division. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [division_id, region_id, code, name, status]
+              properties:
+                division_id:
+                  type: string
+                  format: uuid
+                region_id:
+                  type: string
+                  format: uuid
+                branch_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                code:
+                  type: string
+                name:
+                  type: string
+                city:
+                  type: string
+                status:
+                  type: string
+                  enum: [ACTIVE, INACTIVE]
+      responses:
+        '201':
+          description: Territory created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/organization/hierarchy:
+    get:
+      tags: [Organization]
+      summary: Get the organization hierarchy
+      operationId: getOrganizationHierarchy
+      description: Returns divisions, regions, and territories for the caller's tenant. Requires the `employee.view` permission.
+      responses:
+        '200':
+          description: Organization hierarchy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/organization/branches:
+    get:
+      tags: [Organization]
+      summary: List branches
+      operationId: listBranches
+      description: Returns a paginated branch list. Requires the `employee.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+      responses:
+        '200':
+          description: Paginated branches.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Organization]
+      summary: Create a branch
+      operationId: createBranch
+      description: Creates a branch. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, status]
+              properties:
+                division_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                code:
+                  type: string
+                name:
+                  type: string
+                address:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                postal_code:
+                  type: string
+                country_code:
+                  type: string
+                  minLength: 2
+                  maxLength: 2
+                status:
+                  type: string
+                  enum: [ACTIVE, INACTIVE]
+      responses:
+        '201':
+          description: Branch created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/employees:
+    get:
+      tags: [Employees]
+      summary: List employees
+      operationId: listEmployees
+      description: Returns a paginated employee list, optionally filtered by division, territory, or manager. Requires the `employee.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: division_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: territory_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: manager_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated employees.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Employees]
+      summary: Create an employee
+      operationId: createEmployee
+      description: Creates an employee and seeds territory and manager history when supplied. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employee_code, first_name, last_name]
+              properties:
+                employee_code:
+                  type: string
+                user_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                phone:
+                  type: string
+                joining_date:
+                  type: string
+                  format: date
+                division_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                region_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                territory_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                manager_employee_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                position_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '201':
+          description: Employee created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/employees/me:
+    get:
+      tags: [Employees]
+      summary: Get the current user's employee profile
+      operationId: getCurrentEmployee
+      description: Returns the employee linked to the authenticated user. Does not require the `employee.view` permission.
+      responses:
+        '200':
+          description: Linked employee profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/employees/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Employees]
+      summary: Get an employee
+      operationId: getEmployee
+      description: Returns one employee. Requires the `employee.view` permission.
+      responses:
+        '200':
+          description: Employee details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/employees/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Employees]
+      summary: Get employee assignment history
+      operationId: getEmployeeHistory
+      description: Returns effective-dated territory assignments, manager history, and transfers. Requires the `employee.view` permission.
+      responses:
+        '200':
+          description: Employee history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/employees/{id}/transfer:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Employees]
+      summary: Transfer an employee
+      operationId: transferEmployee
+      description: Applies an effective-dated division, territory, manager, and position transfer and writes history records transactionally. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [effective_from]
+              properties:
+                division_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                region_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                territory_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                manager_employee_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                position_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                effective_from:
+                  type: string
+                  format: date
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Transfer applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/positions:
+    get:
+      tags: [Employees]
+      summary: List positions
+      operationId: listPositions
+      description: Returns positions ordered by level and title. Requires the `employee.view` permission.
+      responses:
+        '200':
+          description: Positions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Employees]
+      summary: Create a position
+      operationId: createPosition
+      description: Creates a position. Requires the `employee.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, title, level]
+              properties:
+                code:
+                  type: string
+                title:
+                  type: string
+                level:
+                  type: integer
+                  minimum: 1
+                  maximum: 12
+                is_management:
+                  type: boolean
+                parent_position_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '201':
+          description: Position created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/doctors:
+    get:
+      tags: [Master data]
+      summary: List doctors
+      operationId: listDoctors
+      description: Returns a paginated doctor list. Requires the `doctor.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: territory_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: division_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: is_active
+          in: query
+          schema: {type: boolean}
+      responses:
+        '200':
+          description: Paginated doctors.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Master data]
+      summary: Create a doctor
+      operationId: createDoctor
+      description: Creates a doctor business record, never a patient record. Requires the `doctor.create` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                external_id: {type: string, nullable: true}
+                name: {type: string}
+                specialty: {type: string}
+                qualification: {type: string}
+                registration_no: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string}
+                territory_id: {type: string, format: uuid, nullable: true}
+                division_id: {type: string, format: uuid, nullable: true}
+                is_active: {type: boolean, default: true}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '201':
+          description: Doctor created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/doctors/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Master data]
+      summary: Get a doctor
+      operationId: getDoctor
+      description: Requires the `doctor.view` permission.
+      responses:
+        '200':
+          description: Doctor details.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    patch:
+      tags: [Master data]
+      summary: Update a doctor
+      operationId: updateDoctor
+      description: Requires the `doctor.update` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string}
+                specialty: {type: string}
+                qualification: {type: string}
+                registration_no: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string}
+                territory_id: {type: string, format: uuid, nullable: true}
+                division_id: {type: string, format: uuid, nullable: true}
+                is_active: {type: boolean}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '200':
+          description: Doctor updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    delete:
+      tags: [Master data]
+      summary: Delete a doctor
+      operationId: deleteDoctor
+      description: Soft-deletes a doctor. Requires the `doctor.update` permission.
+      responses:
+        '200':
+          description: Doctor deleted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/doctors/{id}/territories:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Master data]
+      summary: List doctor territory assignments
+      operationId: listDoctorTerritories
+      description: Requires the `doctor.view` permission.
+      responses:
+        '200':
+          description: Effective-dated territory assignments.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Master data]
+      summary: Assign a doctor territory
+      operationId: assignDoctorTerritory
+      description: Creates an effective-dated doctor-territory assignment. Requires the `doctor.update` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [territory_id]
+              properties:
+                territory_id: {type: string, format: uuid}
+                valid_from: {type: string, format: date}
+                valid_to: {type: string, format: date, nullable: true}
+                is_primary: {type: boolean, default: true}
+      responses:
+        '201':
+          description: Territory assigned.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/chemists:
+    get:
+      tags: [Master data]
+      summary: List chemists
+      operationId: listChemists
+      description: Requires the `chemist.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: territory_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: division_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: is_active
+          in: query
+          schema: {type: boolean}
+      responses:
+        '200':
+          description: Paginated chemists.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Master data]
+      summary: Create a chemist
+      operationId: createChemist
+      description: Requires the `chemist.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                external_id: {type: string, nullable: true}
+                name: {type: string}
+                owner_name: {type: string}
+                license_no: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string}
+                territory_id: {type: string, format: uuid, nullable: true}
+                division_id: {type: string, format: uuid, nullable: true}
+                is_active: {type: boolean, default: true}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '201':
+          description: Chemist created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/chemists/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Master data]
+      summary: Get a chemist
+      operationId: getChemist
+      description: Requires the `chemist.view` permission.
+      responses:
+        '200':
+          description: Chemist details.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    patch:
+      tags: [Master data]
+      summary: Update a chemist
+      operationId: updateChemist
+      description: Requires the `chemist.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string}
+                owner_name: {type: string}
+                license_no: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string}
+                territory_id: {type: string, format: uuid, nullable: true}
+                division_id: {type: string, format: uuid, nullable: true}
+                is_active: {type: boolean}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '200':
+          description: Chemist updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    delete:
+      tags: [Master data]
+      summary: Delete a chemist
+      operationId: deleteChemist
+      description: Soft-deletes a chemist. Requires the `chemist.manage` permission.
+      responses:
+        '200':
+          description: Chemist deleted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/stockists:
+    get:
+      tags: [Master data]
+      summary: List stockists
+      operationId: listStockists
+      description: Requires the `stockist.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: territory_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: division_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: is_active
+          in: query
+          schema: {type: boolean}
+      responses:
+        '200':
+          description: Paginated stockists.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Master data]
+      summary: Create a stockist
+      operationId: createStockist
+      description: Requires the `stockist.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                external_id: {type: string, nullable: true}
+                name: {type: string}
+                license_no: {type: string}
+                gst_number: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string}
+                territory_id: {type: string, format: uuid, nullable: true}
+                division_id: {type: string, format: uuid, nullable: true}
+                credit_limit: {type: number, default: 0}
+                payment_terms_days: {type: integer, default: 0}
+                is_active: {type: boolean, default: true}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '201':
+          description: Stockist created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/stockists/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Master data]
+      summary: Get a stockist
+      operationId: getStockist
+      description: Requires the `stockist.view` permission.
+      responses:
+        '200':
+          description: Stockist details.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    patch:
+      tags: [Master data]
+      summary: Update a stockist
+      operationId: updateStockist
+      description: Requires the `stockist.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string}
+                license_no: {type: string}
+                gst_number: {type: string}
+                email: {type: string, format: email}
+                phone: {type: string}
+                address: {type: string}
+                territory_id: {type: string, format: uuid, nullable: true}
+                division_id: {type: string, format: uuid, nullable: true}
+                credit_limit: {type: number}
+                payment_terms_days: {type: integer}
+                is_active: {type: boolean}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '200':
+          description: Stockist updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    delete:
+      tags: [Master data]
+      summary: Delete a stockist
+      operationId: deleteStockist
+      description: Soft-deletes a stockist. Requires the `stockist.manage` permission.
+      responses:
+        '200':
+          description: Stockist deleted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/product-categories:
+    get:
+      tags: [Master data]
+      summary: List product categories
+      operationId: listProductCategories
+      description: Requires the `product.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: is_active
+          in: query
+          schema: {type: boolean}
+      responses:
+        '200':
+          description: Paginated categories.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Master data]
+      summary: Create a product category
+      operationId: createProductCategory
+      description: Requires the `product.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code: {type: string}
+                name: {type: string}
+                parent_category_id: {type: string, format: uuid, nullable: true}
+                is_active: {type: boolean, default: true}
+      responses:
+        '201':
+          description: Category created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/products:
+    get:
+      tags: [Master data]
+      summary: List products
+      operationId: listProducts
+      description: Requires the `product.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: category_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: is_active
+          in: query
+          schema: {type: boolean}
+      responses:
+        '200':
+          description: Paginated products.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Master data]
+      summary: Create a product
+      operationId: createProduct
+      description: Requires the `product.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                category_id: {type: string, format: uuid, nullable: true}
+                code: {type: string}
+                name: {type: string}
+                brand: {type: string}
+                manufacturer: {type: string}
+                composition: {type: string}
+                pack_size: {type: string}
+                unit: {type: string}
+                mrp: {type: number, default: 0}
+                is_active: {type: boolean, default: true}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '201':
+          description: Product created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Master data]
+      summary: Get a product
+      operationId: getProduct
+      description: Requires the `product.view` permission.
+      responses:
+        '200':
+          description: Product details.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    patch:
+      tags: [Master data]
+      summary: Update a product
+      operationId: updateProduct
+      description: Requires the `product.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                category_id: {type: string, format: uuid, nullable: true}
+                code: {type: string}
+                name: {type: string}
+                brand: {type: string}
+                manufacturer: {type: string}
+                composition: {type: string}
+                pack_size: {type: string}
+                unit: {type: string}
+                mrp: {type: number}
+                is_active: {type: boolean}
+                settings: {type: object, additionalProperties: true}
+      responses:
+        '200':
+          description: Product updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    delete:
+      tags: [Master data]
+      summary: Delete a product
+      operationId: deleteProduct
+      description: Soft-deletes a product. Requires the `product.manage` permission.
+      responses:
+        '200':
+          description: Product deleted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/targets:
+    get:
+      tags: [CRM targets]
+      summary: List targets
+      operationId: listTargets
+      description: Requires the `target.view` permission.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: employee_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: territory_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          schema: {type: string, enum: [ACTIVE, CLOSED, CANCELLED]}
+        - name: entity_type
+          in: query
+          schema: {type: string, enum: [DOCTOR, CHEMIST, STOCKIST]}
+      responses:
+        '200':
+          description: Paginated targets.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [CRM targets]
+      summary: Create a target
+      operationId: createTarget
+      description: Requires the `target.manage` permission. References an existing doctor, chemist, or stockist and an existing employee.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entity_type, entity_id, employee_id, period_start, period_end, status]
+              properties:
+                entity_type: {type: string, enum: [DOCTOR, CHEMIST, STOCKIST]}
+                entity_id: {type: string, format: uuid}
+                employee_id: {type: string, format: uuid}
+                territory_id: {type: string, format: uuid, nullable: true}
+                period_start: {type: string, format: date}
+                period_end: {type: string, format: date}
+                target_visits: {type: integer, default: 0}
+                target_sales: {type: number, default: 0}
+                status: {type: string, enum: [ACTIVE, CLOSED, CANCELLED], default: ACTIVE}
+      responses:
+        '201':
+          description: Target created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/targets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [CRM targets]
+      summary: Get a target
+      operationId: getTarget
+      description: Requires the `target.view` permission.
+      responses:
+        '200':
+          description: Target details.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    patch:
+      tags: [CRM targets]
+      summary: Update a target
+      operationId: updateTarget
+      description: Requires the `target.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entity_type, entity_id, employee_id, period_start, period_end, status]
+              properties:
+                entity_type: {type: string, enum: [DOCTOR, CHEMIST, STOCKIST]}
+                entity_id: {type: string, format: uuid}
+                employee_id: {type: string, format: uuid}
+                territory_id: {type: string, format: uuid, nullable: true}
+                period_start: {type: string, format: date}
+                period_end: {type: string, format: date}
+                target_visits: {type: integer}
+                target_sales: {type: number}
+                status: {type: string, enum: [ACTIVE, CLOSED, CANCELLED]}
+      responses:
+        '200':
+          description: Target updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    delete:
+      tags: [CRM targets]
+      summary: Delete a target
+      operationId: deleteTarget
+      description: Soft-deletes a target. Requires the `target.manage` permission.
+      responses:
+        '200':
+          description: Target deleted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SuccessEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/tour-plans:
+    get:
+      tags: [Field execution]
+      summary: List tour plans
+      operationId: listTourPlans
+      description: Requires the `tourplan.view` permission and respects the caller's data scope.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: employee_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          schema: {type: string, enum: [DRAFT, SUBMITTED, APPROVED, REJECTED]}
+      responses:
+        '200': {description: Paginated tour plans., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Field execution]
+      summary: Create a tour plan
+      operationId: createTourPlan
+      description: Requires the `tourplan.create` permission; the employee must be in the caller's scope.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employee_id, title, period_start, period_end]
+              properties:
+                id: {type: string, format: uuid, description: Optional client-generated record UUID.}
+                employee_id: {type: string, format: uuid}
+                title: {type: string}
+                period_start: {type: string, format: date}
+                period_end: {type: string, format: date}
+      responses:
+        '201': {description: Tour plan created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/tour-plans/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Field execution]
+      summary: Get a tour plan
+      operationId: getTourPlan
+      responses:
+        '200': {description: Tour plan details., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/tour-plans/{id}/lines:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Field execution]
+      summary: List tour plan lines
+      operationId: listTourPlanLines
+      responses:
+        '200': {description: Plan lines., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Field execution]
+      summary: Add a tour plan line
+      operationId: addTourPlanLine
+      description: Draft plans only. Requires the `tourplan.create` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planned_date, entity_type, entity_id, sequence]
+              properties:
+                planned_date: {type: string, format: date}
+                territory_id: {type: string, format: uuid, nullable: true}
+                entity_type: {type: string, enum: [DOCTOR, CHEMIST, STOCKIST]}
+                entity_id: {type: string, format: uuid}
+                purpose: {type: string}
+                sequence: {type: integer, minimum: 1}
+      responses:
+        '201': {description: Line added., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/tour-plans/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Submit a tour plan
+      operationId: submitTourPlan
+      description: Moves a draft plan to SUBMITTED and requires at least one line.
+      responses:
+        '200': {description: Plan submitted., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/tour-plans/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Approve a tour plan
+      operationId: approveTourPlan
+      description: Requires the `tourplan.approve` permission.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments: {type: string}
+      responses:
+        '200': {description: Plan approved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/tour-plans/{id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Reject a tour plan
+      operationId: rejectTourPlan
+      description: Requires the `tourplan.approve` permission.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments: {type: string}
+      responses:
+        '200': {description: Plan rejected., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/visits:
+    get:
+      tags: [Field execution]
+      summary: List visits
+      operationId: listVisits
+      description: Requires the `visit.view` permission and respects the caller's data scope.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: employee_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: territory_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: entity_type
+          in: query
+          schema: {type: string, enum: [DOCTOR, CHEMIST, STOCKIST]}
+        - name: status
+          in: query
+          schema: {type: string, enum: [DRAFT, SUBMITTED, APPROVED, REJECTED]}
+        - name: from
+          in: query
+          schema: {type: string}
+        - name: to
+          in: query
+          schema: {type: string}
+      responses:
+        '200': {description: Paginated visits., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Field execution]
+      summary: Create a visit
+      operationId: createVisit
+      description: Creates an idempotent GPS check-in visit. Requires the `visit.create` permission.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: UUID used to deduplicate mobile submissions.
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employee_id, entity_type, entity_id]
+              properties:
+                id: {type: string, format: uuid, description: Optional client-generated record UUID.}
+                employee_id: {type: string, format: uuid}
+                tour_plan_line_id: {type: string, format: uuid, nullable: true}
+                territory_id: {type: string, format: uuid, nullable: true}
+                entity_type: {type: string, enum: [DOCTOR, CHEMIST, STOCKIST]}
+                entity_id: {type: string, format: uuid}
+                client_reference_id: {type: string, format: uuid, nullable: true}
+                visited_at: {type: string, format: date-time}
+                check_in_lat: {type: number, minimum: -90, maximum: 90, nullable: true}
+                check_in_lng: {type: number, minimum: -180, maximum: 180, nullable: true}
+                check_in_accuracy: {type: number, minimum: 0, nullable: true}
+                remarks: {type: string}
+      responses:
+        '201': {description: Visit created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/visits/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Field execution]
+      summary: Get a visit
+      operationId: getVisit
+      responses:
+        '200': {description: Visit details., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/visits/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Submit a visit
+      operationId: submitVisit
+      description: Moves a draft visit to SUBMITTED and writes an audit entry.
+      responses:
+        '200': {description: Visit submitted., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/visits/{id}/attachments:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Record a visit attachment
+      operationId: addVisitAttachment
+      description: Records object-storage metadata; the binary upload is handled outside this API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, storage_key]
+              properties:
+                file_name: {type: string}
+                content_type: {type: string}
+                storage_key: {type: string}
+                checksum: {type: string}
+      responses:
+        '201': {description: Attachment recorded., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/dcr:
+    get:
+      tags: [Field execution]
+      summary: List daily call reports
+      operationId: listDailyCallReports
+      description: Requires the `dcr.view` permission and respects the caller's data scope.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - $ref: '#/components/parameters/SearchParam'
+        - name: employee_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          schema: {type: string, enum: [DRAFT, SUBMITTED, APPROVED, REJECTED]}
+        - name: from
+          in: query
+          schema: {type: string, format: date}
+        - name: to
+          in: query
+          schema: {type: string, format: date}
+      responses:
+        '200': {description: Paginated reports., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Field execution]
+      summary: Create or reuse a daily call report
+      operationId: createDailyCallReport
+      description: One draft report per employee and date. Requires the `dcr.create` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employee_id, report_date]
+              properties:
+                id: {type: string, format: uuid, description: Optional client-generated record UUID.}
+                employee_id: {type: string, format: uuid}
+                report_date: {type: string, format: date}
+      responses:
+        '201': {description: Report created or reused., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/dcr/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Field execution]
+      summary: Get a daily call report
+      operationId: getDailyCallReport
+      responses:
+        '200': {description: Report details., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/dcr/{id}/products:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Field execution]
+      summary: List DCR product details
+      operationId: listDcrProducts
+      responses:
+        '200': {description: Product details., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Field execution]
+      summary: Add a DCR product detail
+      operationId: addDcrProduct
+      description: Draft reports only. Requires the `dcr.create` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id: {type: string, format: uuid}
+                quantity: {type: integer, minimum: 0, default: 0}
+                sample_count: {type: integer, minimum: 0, default: 0}
+                outcome: {type: string}
+                remarks: {type: string}
+      responses:
+        '201': {description: Product detail added., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/dcr/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Submit a daily call report
+      operationId: submitDailyCallReport
+      description: Counts submitted or approved visits for the report date and requires at least one product detail.
+      responses:
+        '200': {description: Report submitted., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/dcr/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Approve a daily call report
+      operationId: approveDailyCallReport
+      description: Requires the `dcr.review` permission.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remarks: {type: string}
+      responses:
+        '200': {description: Report approved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/dcr/{id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Field execution]
+      summary: Reject a daily call report
+      operationId: rejectDailyCallReport
+      description: Requires the `dcr.review` permission.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remarks: {type: string}
+      responses:
+        '200': {description: Report rejected., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/distribution-links:
+    get:
+      tags: [Distribution]
+      summary: List company-distributor links
+      operationId: listDistributionLinks
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          schema: {type: string, enum: [ACTIVE, SUSPENDED, ENDED]}
+      responses:
+        '200': {description: Links retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Distribution]
+      summary: Create a company-distributor link
+      operationId: createDistributionLink
+      description: Requires the `link.manage` permission. The owning tenant is derived from the authenticated session, never from the request body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [distributor_tenant_id]
+              properties:
+                id: {type: string, format: uuid}
+                distributor_tenant_id: {type: string, format: uuid}
+                status: {type: string, enum: [ACTIVE, SUSPENDED, ENDED], default: ACTIVE}
+                effective_from: {type: string, format: date}
+                effective_to: {type: string, format: date}
+                credit_limit: {type: number, format: double}
+                payment_terms_days: {type: integer}
+      responses:
+        '201': {description: Link created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/distribution-links/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    patch:
+      tags: [Distribution]
+      summary: Suspend, resume, or end a company-distributor link
+      operationId: updateDistributionLinkStatus
+      description: Requires the `link.manage` permission. Suspension immediately removes cross-tenant visibility.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: {type: string, enum: [ACTIVE, SUSPENDED, ENDED]}
+      responses:
+        '200': {description: Link updated., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/distributors:
+    get:
+      tags: [Distribution]
+      summary: List visible distributors
+      operationId: listDistributors
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          schema: {type: string, enum: [ACTIVE, INACTIVE]}
+      responses:
+        '200': {description: Distributors retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Distribution]
+      summary: Create a distributor profile
+      operationId: createDistributor
+      description: Requires the `distributor.manage` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                id: {type: string, format: uuid}
+                code: {type: string}
+                name: {type: string}
+                license_no: {type: string}
+                email: {type: string}
+                phone: {type: string}
+                address: {type: string}
+                status: {type: string, enum: [ACTIVE, INACTIVE]}
+      responses:
+        '201': {description: Distributor created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/distributors/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Distribution]
+      summary: Get a visible distributor
+      operationId: getDistributor
+      responses:
+        '200': {description: Distributor retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/orders:
+    get:
+      tags: [Distribution]
+      summary: List orders visible to the company or linked distributor
+      operationId: listOrders
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          schema: {type: string, enum: [DRAFT, SUBMITTED, APPROVED, FULFILLED, CANCELLED]}
+        - name: distributor_tenant_id
+          in: query
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: Orders retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Distribution]
+      summary: Create an order against an active link
+      operationId: createOrder
+      description: Requires the `order.manage` permission and a valid `Idempotency-Key` UUID header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [distributor_tenant_id, items]
+              properties:
+                id: {type: string, format: uuid}
+                company_tenant_id: {type: string, format: uuid}
+                distributor_tenant_id: {type: string, format: uuid}
+                order_number: {type: string}
+                currency_code: {type: string, default: USD}
+                order_date: {type: string, format: date}
+                required_by: {type: string, format: date}
+                remarks: {type: string}
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [product_id, quantity]
+                    properties:
+                      id: {type: string, format: uuid}
+                      product_id: {type: string, format: uuid}
+                      quantity: {type: integer, minimum: 1}
+                      unit_price: {type: number, format: double}
+      responses:
+        '201': {description: Order created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    get:
+      tags: [Distribution]
+      summary: Get an order with its lines
+      operationId: getOrder
+      responses:
+        '200': {description: Order retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/orders/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Distribution]
+      summary: Submit a draft order
+      operationId: submitOrder
+      responses:
+        '200': {description: Order submitted., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/orders/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Distribution]
+      summary: Approve a submitted order and reserve stock
+      operationId: approveOrder
+      description: Requires the `order.approve` permission. Stock reservation is serialized and idempotent per order.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remarks: {type: string}
+      responses:
+        '200': {description: Order approved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/orders/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/IDParam'
+    post:
+      tags: [Distribution]
+      summary: Cancel a draft or submitted order
+      operationId: cancelOrder
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remarks: {type: string}
+      responses:
+        '200': {description: Order cancelled., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/inventory:
+    get:
+      tags: [Distribution]
+      summary: List distributor inventory visible through active links
+      operationId: listInventory
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: product_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: warehouse_code
+          in: query
+          schema: {type: string}
+      responses:
+        '200': {description: Inventory retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/inventory/movements:
+    get:
+      tags: [Distribution]
+      summary: List inventory movements
+      operationId: listInventoryMovements
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: product_id
+          in: query
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: Inventory movements retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Distribution]
+      summary: Record a server-authoritative inventory movement
+      operationId: adjustInventory
+      description: Requires the `inventory.manage` permission and a valid `Idempotency-Key` UUID header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, movement_type, quantity_delta]
+              properties:
+                id: {type: string, format: uuid}
+                product_id: {type: string, format: uuid}
+                warehouse_code: {type: string, default: MAIN}
+                movement_type: {type: string, enum: [RECEIPT, SALE, ADJUSTMENT]}
+                quantity_delta: {type: integer, not: {const: 0}}
+                reference_type: {type: string}
+                reference_id: {type: string, format: uuid}
+                occurred_at: {type: string, format: date-time}
+      responses:
+        '201': {description: Inventory adjusted., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/secondary-sales:
+    get:
+      tags: [Distribution]
+      summary: List secondary sales visible to distributors and linked companies
+      operationId: listSecondarySales
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: from
+          in: query
+          schema: {type: string, format: date}
+        - name: to
+          in: query
+          schema: {type: string, format: date}
+      responses:
+        '200': {description: Secondary sales retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Distribution]
+      summary: Record a secondary sale
+      operationId: createSecondarySale
+      description: Requires the `secondary_sales.import` permission and a valid `Idempotency-Key` UUID header.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, quantity]
+              properties:
+                id: {type: string, format: uuid}
+                company_tenant_id: {type: string, format: uuid}
+                order_id: {type: string, format: uuid}
+                product_id: {type: string, format: uuid}
+                quantity: {type: integer, minimum: 1}
+                unit_price: {type: number, format: double}
+                sale_date: {type: string, format: date}
+                invoice_no: {type: string}
+                customer_code: {type: string}
+      responses:
+        '201': {description: Secondary sale recorded., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/reports/field-activity:
+    get:
+      tags: [Reporting]
+      summary: Field activity dashboard
+      operationId: getFieldActivityReport
+      description: Returns visit and daily-call-report counts for the authenticated tenant and the principal's data scope.
+      parameters:
+        - {name: from, in: query, required: false, description: Inclusive start date (YYYY-MM-DD). Defaults to 29 days ago., schema: {type: string, format: date}}
+        - {name: to, in: query, required: false, description: Inclusive end date (YYYY-MM-DD). Defaults to today., schema: {type: string, format: date}}
+      responses:
+        '200': {description: Field activity report., content: {application/json: {schema: {$ref: '#/components/schemas/FieldActivityReport'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/reports/distribution:
+    get:
+      tags: [Reporting]
+      summary: Distribution dashboard
+      operationId: getDistributionSummaryReport
+      description: Returns link-aware order, inventory, secondary-sale, and active-link metrics.
+      parameters:
+        - {name: from, in: query, required: false, description: Inclusive start date (YYYY-MM-DD)., schema: {type: string, format: date}}
+        - {name: to, in: query, required: false, description: Inclusive end date (YYYY-MM-DD)., schema: {type: string, format: date}}
+      responses:
+        '200': {description: Distribution summary report., content: {application/json: {schema: {$ref: '#/components/schemas/DistributionSummaryReport'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/reports/audit:
+    get:
+      tags: [Reporting]
+      summary: Query immutable audit trail
+      operationId: listAuditTrail
+      description: Reads append-only audit entries for the authenticated tenant. Update and delete are rejected by the database trigger.
+      parameters:
+        - {name: from, in: query, required: false, schema: {type: string, format: date}}
+        - {name: to, in: query, required: false, schema: {type: string, format: date}}
+        - {name: module, in: query, required: false, schema: {type: string}}
+        - {name: action, in: query, required: false, schema: {type: string}}
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
+        - {name: search, in: query, required: false, description: Case-insensitive entity ID fragment., schema: {type: string}}
+      responses:
+        '200': {description: Audit entries retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/reports/definitions:
+    get:
+      tags: [Reporting]
+      summary: List saved report definitions
+      operationId: listReportDefinitions
+      parameters:
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
+        - {name: search, in: query, required: false, schema: {type: string}}
+      responses:
+        '200': {description: Report definitions retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Reporting]
+      summary: Create saved report definition
+      operationId: createReportDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReportDefinitionRequest'}
+      responses:
+        '201': {description: Report definition created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/reports/snapshots:
+    get:
+      tags: [Reporting]
+      summary: List report snapshots
+      operationId: listReportSnapshots
+      parameters:
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
+      responses:
+        '200': {description: Report snapshots retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Reporting]
+      summary: Create report snapshot
+      operationId: createReportSnapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SnapshotRequest'}
+      responses:
+        '201': {description: Report snapshot created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/reports/snapshots/{id}:
+    get:
+      tags: [Reporting]
+      summary: Get report snapshot
+      operationId: getReportSnapshot
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Report snapshot., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/integrations/connections:
+    get:
+      tags: [Integrations]
+      summary: List integration connections
+      operationId: listIntegrationConnections
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string, enum: [ACTIVE, DISABLED]}}
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
+        - {name: search, in: query, required: false, schema: {type: string}}
+      responses:
+        '200': {description: Integration connections retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+    post:
+      tags: [Integrations]
+      summary: Create integration connection
+      operationId: createIntegrationConnection
+      description: Secret values are never returned; `secret_ref` names an environment variable resolved by the dispatcher.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConnectionCreateRequest'}
+      responses:
+        '201': {description: Integration connection created., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/integrations/connections/{id}/status:
+    patch:
+      tags: [Integrations]
+      summary: Enable or disable an integration connection
+      operationId: setIntegrationConnectionStatus
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConnectionStatusRequest'}
+      responses:
+        '200': {description: Status updated., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/integrations/connections/{id}:
+    delete:
+      tags: [Integrations]
+      summary: Delete an integration connection
+      operationId: deleteIntegrationConnection
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Connection deleted., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/integrations/events:
+    post:
+      tags: [Integrations]
+      summary: Queue a webhook event
+      operationId: publishWebhookEvent
+      description: Creates one idempotent delivery per active webhook connection in the authenticated tenant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventRequest'}
+      responses:
+        '201': {description: Webhook event queued., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/integrations/deliveries:
+    get:
+      tags: [Integrations]
+      summary: List webhook deliveries
+      operationId: listWebhookDeliveries
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string, enum: [PENDING, IN_FLIGHT, DELIVERED, FAILED, DEAD]}}
+        - {name: event_type, in: query, required: false, schema: {type: string}}
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 20}}
+        - {name: search, in: query, required: false, description: Case-insensitive event ID fragment., schema: {type: string}}
+      responses:
+        '200': {description: Webhook deliveries retrieved., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/integrations/deliveries/{id}/retry:
+    post:
+      tags: [Integrations]
+      summary: Retry a failed webhook delivery
+      operationId: retryWebhookDelivery
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Delivery requeued., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/sync/changes:
+    get:
+      tags: [Mobile sync]
+      summary: Pull scoped server changes
+      operationId: listSyncChanges
+      description: |
+        Returns changes for the authenticated principal's tenant and data scope.
+        The cursor is opaque and must be passed back unchanged. Use `entities` to
+        limit the pull to a comma-separated subset of supported read models.
+      parameters:
+        - name: since
+          in: query
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+        - name: entities
+          in: query
+          description: Comma-separated entity names such as `doctor,product,visit,order,inventory`.
+          schema: {type: string}
+      responses:
+        '200': {description: Paginated changes., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/sync/operations:
+    post:
+      tags: [Mobile sync]
+      summary: Push a batch of offline operations
+      operationId: pushSyncOperations
+      description: |
+        Applies a batch of device operations and returns one result per operation.
+        Each result status is `APPLIED`, `REPLAYED`, `CONFLICT`, or `REJECTED`.
+        Successful operations are stored by client operation ID for replay.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operations]
+              properties:
+                operations:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [id, entity, entity_id, operation, payload, idempotency_key]
+                    properties:
+                      id: {type: string, format: uuid}
+                      entity: {type: string}
+                      entity_id: {type: string, format: uuid}
+                      operation: {type: string, enum: [visit.create, visit.submit, visit.attachment, dcr.create, dcr.product.add, dcr.submit, dcr.approve, dcr.reject, tour.create, tour.line.add, tour.submit, tour.approve, tour.reject, order.create, order.submit, order.approve, secondary_sale.create, inventory.movement]}
+                      payload: {type: object, additionalProperties: true}
+                      idempotency_key: {type: string, format: uuid}
+      responses:
+        '200': {description: Operation results., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/sync/status:
+    get:
+      tags: [Mobile sync]
+      summary: Get sync status
+      operationId: getSyncStatus
+      description: Returns server time for clock-skew correction, the latest cursor, queue hints, and supported entities.
+      responses:
+        '200': {description: Sync status., content: {application/json: {schema: {$ref: '#/components/schemas/SuccessEnvelope'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token issued by `POST /api/v1/auth/login` or `POST /api/v1/auth/refresh`.
+  parameters:
+    IDParam:
+      name: id
+      in: path
+      required: true
+      description: UUID of the resource.
+      schema:
+        type: string
+        format: uuid
+    RoleIDParam:
+      name: role_id
+      in: path
+      required: true
+      description: UUID of the role grant to remove.
+      schema:
+        type: string
+        format: uuid
+    SettingKeyParam:
+      name: key
+      in: path
+      required: true
+      description: Tenant setting key.
+      schema:
+        type: string
+        minLength: 1
+    ScopeTypeParam:
+      name: scope_type
+      in: query
+      required: false
+      description: Scope type of the role grant to remove. Defaults to `TENANT`.
+      schema:
+        type: string
+        default: TENANT
+    ScopeIDParam:
+      name: scope_id
+      in: query
+      required: false
+      description: Optional scope UUID of the role grant to remove.
+      schema:
+        type: string
+        format: uuid
+    PageParam:
+      name: page
+      in: query
+      required: false
+      description: One-based page number; invalid values fall back to 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: page_size
+      in: query
+      required: false
+      description: Page size; values greater than 200 or below 1 fall back to 20.
+      schema:
+        type: integer
+        default: 20
+    SortParam:
+      name: sort
+      in: query
+      required: false
+      description: Sort field; unsupported values fall back to `created_at`.
+      schema:
+        type: string
+        enum: [created_at, updated_at, name, email, code, status]
+        default: created_at
+    OrderParam:
+      name: order
+      in: query
+      required: false
+      description: Sort direction; invalid values fall back to `desc`.
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+    SearchParam:
+      name: search
+      in: query
+      required: false
+      description: Optional search term; support depends on the resource repository.
+      schema:
+        type: string
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated UUID used to deduplicate non-idempotent writes.
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Malformed JSON, invalid path parameter, or otherwise invalid request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Missing, invalid, or expired authentication, or an expired/revoked session.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Caller lacks the required permission or resource access.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Resource not found or inaccessible for the caller's tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Resource already exists or cannot be modified in its current state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnprocessableEntity:
+      description: Request passed JSON decoding but failed field validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InternalServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    TooManyRequests:
+      description: Client exceeded the configured per-IP rate limit.
+      headers:
+        Retry-After:
+          description: Seconds until the client may retry.
+          schema:
+            type: integer
+            example: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    ServiceUnavailable:
+      description: Database unavailable, migration state unavailable, or migrations pending.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    FieldActivityReport:
+      type: object
+      properties:
+        period: {type: object, properties: {from: {type: string, format: date}, to: {type: string, format: date}}}
+        scope: {type: string, example: TERRITORY}
+        visits:
+          type: object
+          properties:
+            total: {type: integer}
+            submitted: {type: integer}
+            draft: {type: integer}
+            unique_customers: {type: integer}
+        daily_call_reports:
+          type: object
+          properties:
+            total: {type: integer}
+            submitted: {type: integer}
+            approved: {type: integer}
+    DistributionSummaryReport:
+      type: object
+      properties:
+        period: {type: object, properties: {from: {type: string, format: date}, to: {type: string, format: date}}}
+        orders:
+          type: object
+          properties:
+            total: {type: integer}
+            submitted: {type: integer}
+            approved: {type: integer}
+            cancelled: {type: integer}
+            value: {type: number, format: double}
+        inventory:
+          type: object
+          properties:
+            sku_count: {type: integer}
+            on_hand: {type: integer}
+            reserved: {type: integer}
+        secondary_sales:
+          type: object
+          properties:
+            records: {type: integer}
+            units: {type: integer}
+            value: {type: number, format: double}
+        active_links: {type: integer}
+    ReportDefinitionRequest:
+      type: object
+      required: [code, name, report_type]
+      properties:
+        code: {type: string, maxLength: 80}
+        name: {type: string, maxLength: 160}
+        description: {type: string}
+        report_type: {type: string, enum: [FIELD_ACTIVITY, DISTRIBUTION_SUMMARY, AUDIT_TRAIL]}
+        config: {type: object, additionalProperties: true}
+    ReportDefinition:
+      allOf:
+        - {$ref: '#/components/schemas/ReportDefinitionRequest'}
+        - type: object
+          properties:
+            id: {type: string, format: uuid}
+            tenant_id: {type: string, format: uuid}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    SnapshotRequest:
+      type: object
+      required: [report_type, payload]
+      properties:
+        definition_id: {type: string, format: uuid}
+        report_type: {type: string, enum: [FIELD_ACTIVITY, DISTRIBUTION_SUMMARY, AUDIT_TRAIL]}
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        payload: {type: object, additionalProperties: true}
+    ReportSnapshot:
+      allOf:
+        - {$ref: '#/components/schemas/SnapshotRequest'}
+        - type: object
+          properties:
+            id: {type: string, format: uuid}
+            tenant_id: {type: string, format: uuid}
+            period_from: {type: string, format: date}
+            period_to: {type: string, format: date}
+            created_at: {type: string, format: date-time}
+    ConnectionCreateRequest:
+      type: object
+      required: [name, kind]
+      properties:
+        name: {type: string, maxLength: 120}
+        kind: {type: string, enum: [WEBHOOK, ERP, ANALYTICS]}
+        endpoint_url: {type: string, format: uri}
+        secret_ref: {type: string, maxLength: 160, description: Environment variable name containing the webhook signing secret.}
+        headers: {type: object, additionalProperties: {type: string}}
+    ConnectionStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [ACTIVE, DISABLED]}
+    IntegrationConnection:
+      allOf:
+        - {$ref: '#/components/schemas/ConnectionCreateRequest'}
+        - type: object
+          properties:
+            id: {type: string, format: uuid}
+            tenant_id: {type: string, format: uuid}
+            status: {type: string, enum: [ACTIVE, DISABLED]}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    EventRequest:
+      type: object
+      required: [event_type, event_id, payload]
+      properties:
+        event_type: {type: string, maxLength: 120}
+        event_id: {type: string, maxLength: 200}
+        payload: {type: object, additionalProperties: true}
+    WebhookDelivery:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        connection_id: {type: string, format: uuid}
+        event_type: {type: string}
+        event_id: {type: string}
+        payload: {type: object, additionalProperties: true}
+        status: {type: string, enum: [PENDING, IN_FLIGHT, DELIVERED, FAILED, DEAD]}
+        attempts: {type: integer}
+        next_attempt_at: {type: string, format: date-time}
+        last_error: {type: string}
+        response_status: {type: integer}
+        delivered_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SuccessEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          description: Endpoint-specific payload; omitted when there is no data.
+          nullable: true
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+        errors:
+          description: Not present on successful responses.
+    ErrorEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Validation failed
+        errors:
+          description: Optional validation errors or operation details.
+          nullable: true
+    PageMeta:
+      type: object
+      required: [page, page_size, total, total_pages]
+      properties:
+        page:
+          type: integer
+          example: 1
+        page_size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          format: int64
+          example: 0
+        total_pages:
+          type: integer
+          example: 0
+    LoginRequest:
+      type: object
+      required: [tenant_code, email, password]
+      properties:
+        tenant_code:
+          type: string
+          minLength: 2
+          maxLength: 40
+          example: ACME
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6
+        device_id:
+          type: string
+          description: Optional device identifier stored with the session.
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in, refresh_expires_in]
+      properties:
+        access_token:
+          type: string
+          description: JWT access token used with bearer authentication.
+        refresh_token:
+          type: string
+          format: password
+          description: JWT refresh token used with the refresh endpoint.
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Access token lifetime in seconds.
+        refresh_expires_in:
+          type: integer
+          description: Refresh token lifetime in seconds.
+    User:
+      type: object
+      required: [id, tenant_id, email, first_name, last_name, status, email_verified, must_change_password, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        email_verified:
+          type: boolean
+        must_change_password:
+          type: boolean
+        locked_until:
+          type: string
+          format: date-time
+          nullable: true
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Role:
+      type: object
+      required: [id, code, name, description, is_system, is_privileged, data_scope, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null for platform-wide roles.
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        is_system:
+          type: boolean
+        is_privileged:
+          type: boolean
+        data_scope:
+          type: string
+          enum: [SELF, TEAM, TERRITORY, REGION, DIVISION, TENANT]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RoleWithPermissions:
+      allOf:
+        - $ref: '#/components/schemas/Role'
+        - type: object
+          required: [permissions]
+          properties:
+            permissions:
+              type: array
+              items:
+                type: string
+    Tenant:
+      type: object
+      required: [id, code, name, tenant_type, status, is_platform, timezone, currency_code, settings, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        tenant_type:
+          type: string
+          example: PHARMA_COMPANY
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, INACTIVE]
+        is_platform:
+          type: boolean
+        country_code:
+          type: string
+          minLength: 2
+          maxLength: 2
+          nullable: true
+        timezone:
+          type: string
+          example: UTC
+        currency_code:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: USD
+        settings:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Permission:
+      type: object
+      required: [id, code, module, description, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        module:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    LoginPrincipal:
+      type: object
+      required: [id, tenant_id, email, roles, permissions, data_scope]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        data_scope:
+          type: string
+          enum: [SELF, TEAM, TERRITORY, REGION, DIVISION, TENANT]
+    RefreshPrincipal:
+      type: object
+      required: [id, tenant_id, roles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        roles:
+          type: array
+          items:
+            type: string
+    Principal:
+      type: object
+      required: [id, tenant_id, email, roles, permissions, data_scope, is_privileged, division_ids, territory_ids]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        data_scope:
+          type: string
+          enum: [SELF, TEAM, TERRITORY, REGION, DIVISION, TENANT]
+        is_privileged:
+          type: boolean
+        division_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        territory_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+    Session:
+      type: object
+      required: [ID, UserID, TenantID, FamilyID, RefreshTokenHash, ExpiresAt, CreatedAt]
+      description: Session record as exposed by the sessions endpoint.
+      properties:
+        ID:
+          type: string
+          format: uuid
+        UserID:
+          type: string
+          format: uuid
+        TenantID:
+          type: string
+          format: uuid
+        FamilyID:
+          type: string
+          format: uuid
+        RefreshTokenHash:
+          type: string
+          description: Hash of the refresh token bound to this session.
+        IPAddress:
+          type: string
+          nullable: true
+        UserAgent:
+          type: string
+          nullable: true
+        DeviceID:
+          type: string
+          nullable: true
+        ExpiresAt:
+          type: string
+          format: date-time
+        RevokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        CreatedAt:
+          type: string
+          format: date-time
+    UserRoleGrant:
+      type: object
+      required: [user_id, role_id, scope_type, valid_from]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role_id:
+          type: string
+          format: uuid
+        scope_type:
+          type: string
+        scope_id:
+          type: string
+          format: uuid
+          nullable: true
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type: string
+          format: date-time
+          nullable: true
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          format: password
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+          minLength: 10
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+          minLength: 10
+    CreateTenantRequest:
+      type: object
+      required: [code, name, tenant_type]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+        name:
+          type: string
+          minLength: 2
+          maxLength: 180
+        tenant_type:
+          type: string
+          enum: [PHARMA_COMPANY, DISTRIBUTOR]
+        country_code:
+          type: string
+          minLength: 2
+          maxLength: 2
+          nullable: true
+        timezone:
+          type: string
+          maxLength: 80
+          description: Defaults to UTC.
+        currency_code:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: Defaults to USD.
+        settings:
+          type: object
+          additionalProperties: true
+    UpdateTenantRequest:
+      type: object
+      required: [name, status, timezone, currency_code]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 180
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, INACTIVE]
+        timezone:
+          type: string
+          maxLength: 80
+        currency_code:
+          type: string
+          minLength: 3
+          maxLength: 3
+        settings:
+          type: object
+          additionalProperties: true
+    SettingValueRequest:
+      type: object
+      additionalProperties: true
+      description: Arbitrary JSON object stored as the setting value.
+    CreateUserRequest:
+      type: object
+      required: [email, password, first_name, last_name]
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+          description: Optional for privileged callers; otherwise the caller's tenant is used.
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 10
+        first_name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        last_name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        phone:
+          type: string
+        must_change_password:
+          type: boolean
+    UpdateUserRequest:
+      type: object
+      required: [first_name, last_name, status]
+      properties:
+        first_name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        last_name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        phone:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        email_verified:
+          type: boolean
+    AssignRoleRequest:
+      type: object
+      required: [role_id, scope_type]
+      properties:
+        role_id:
+          type: string
+          format: uuid
+        scope_type:
+          type: string
+          enum: [SELF, TERRITORY, REGION, DIVISION, TENANT, PARTNER]
+        scope_id:
+          type: string
+          format: uuid
+          nullable: true
+        valid_from:
+          type: string
+          format: date
+          description: Optional ISO date (YYYY-MM-DD); defaults to the current date.
+        valid_to:
+          type: string
+          format: date
+          nullable: true
+          description: Optional ISO date (YYYY-MM-DD).
+    CreateRoleRequest:
+      type: object
+      required: [code, name, data_scope]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 40
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        description:
+          type: string
+        data_scope:
+          type: string
+          enum: [SELF, TEAM, TERRITORY, REGION, DIVISION, TENANT]
+        is_privileged:
+          type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
+    UpdateRoleRequest:
+      type: object
+      required: [name, data_scope]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        description:
+          type: string
+        data_scope:
+          type: string
+          enum: [SELF, TEAM, TERRITORY, REGION, DIVISION, TENANT]
+        is_privileged:
+          type: boolean
+          description: Only privileged callers may set this to true.
+    SetPermissionsRequest:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    LoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [tokens, user]
+              properties:
+                tokens:
+                  $ref: '#/components/schemas/TokenPair'
+                user:
+                  $ref: '#/components/schemas/LoginPrincipal'
+    RefreshResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [tokens, user]
+              properties:
+                tokens:
+                  $ref: '#/components/schemas/TokenPair'
+                user:
+                  $ref: '#/components/schemas/RefreshPrincipal'
+    PrincipalResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Principal'
+    SessionListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Session'
+    TenantResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Tenant'
+    TenantListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Tenant'
+            meta:
+              $ref: '#/components/schemas/PageMeta'
+    TenantSettingResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [tenant_id, key, value]
+              properties:
+                tenant_id:
+                  type: string
+                  format: uuid
+                key:
+                  type: string
+                value:
+                  type: object
+                  additionalProperties: true
+    UserResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/User'
+    UserListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
+            meta:
+              $ref: '#/components/schemas/PageMeta'
+    UserRoleGrantListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserRoleGrant'
+    RoleResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/RoleWithPermissions'
+    RoleListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Role'
+            meta:
+              $ref: '#/components/schemas/PageMeta'
+    PermissionListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Permission'
+    FlagResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              additionalProperties: true
+              description: Operation-specific confirmation flags or status fields.

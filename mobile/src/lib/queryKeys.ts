@@ -1,0 +1,22 @@
+export const queryKeys = {
+  syncStatus: ['sync-status'] as const,
+  fieldActivity: (from: string, to: string) => ['reports', 'field-activity', from, to] as const,
+  distributionReport: (from: string, to: string) => ['reports', 'distribution', from, to] as const,
+  employees: ['employees'] as const,
+  partyChoices: (entityType: string, search: string) => ['party-choices', entityType, search] as const,
+  visits: (filters: Record<string, string | undefined>) => ['visits', filters] as const,
+  tourPlans: (filters: Record<string, string | undefined>) => ['tour-plans', filters] as const,
+  tourLines: (id: string) => ['tour-plans', id, 'lines'] as const,
+  dcr: (filters: Record<string, string | undefined>) => ['dcr', filters] as const,
+  dcrProducts: (id: string) => ['dcr', id, 'products'] as const,
+  doctors: (search: string) => ['doctors', search] as const,
+  chemists: (search: string) => ['chemists', search] as const,
+  stockists: (search: string) => ['stockists', search] as const,
+  products: (search: string) => ['products', search] as const,
+  orders: (filters: Record<string, string | undefined>) => ['orders', filters] as const,
+  orderDetail: (id: string) => ['orders', id] as const,
+  distributionLinks: ['distribution-links'] as const,
+  distributors: ['distributors'] as const,
+  inventory: (filters: Record<string, string | undefined>) => ['inventory', filters] as const,
+  sessions: ['sessions'] as const
+};

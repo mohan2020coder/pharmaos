@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS employee_transfers;
+DROP TABLE IF EXISTS employee_manager_history;
+DROP TABLE IF EXISTS employee_territory_assignments;
+DROP TABLE IF EXISTS employee_positions;
+DROP TABLE IF EXISTS employees;
+DROP TABLE IF EXISTS positions;
+DROP TABLE IF EXISTS territories;
+DROP TABLE IF EXISTS regions;
+DROP TABLE IF EXISTS branches;
+DROP TABLE IF EXISTS business_divisions;
+DROP FUNCTION IF EXISTS pharmaos_validate_territory_hierarchy();
